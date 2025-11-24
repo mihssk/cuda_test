@@ -1,287 +1,262 @@
 #include <cuda_runtime.h>
 #include <iostream>
 #include <chrono>
+#include <random>
 using namespace std;
 
-#define CHECK_CUDA(call) \
-    do { \
-        cudaError_t error = call; \
-        if (error != cudaSuccess) { \
-            cerr << "CUDA error at " << __FILE__ << ":" << __LINE__ \
-                      << " - " << cudaGetErrorString(error) << endl; \
-            exit(1); \
-        } \
-    } while(0)
 
-#define TILE_SIZE 32
 #define BLOCK_SIZE 16
 #define THREAD_TILE_M 4
 #define THREAD_TILE_N 4
 
-__global__ void optimized_matmul_kernel( const float* __restrict__ A, const float* __restrict__ B, float* __restrict__ C, int M, int N, int K ) {
-
-    __shared__ float tile_A[TILE_SIZE][TILE_SIZE + 1];
-    __shared__ float tile_B[TILE_SIZE][TILE_SIZE + 1];
-
-    int tx = threadIdx.x;
-    int ty = threadIdx.y;
-    int bx = blockIdx.x;
-    int by = blockIdx.y;
-
-    // Calculate global indices for this thread's tile
-    int row_base = by * TILE_SIZE + ty * THREAD_TILE_M;
-    int col_base = bx * TILE_SIZE + tx * THREAD_TILE_N;
-
-    // Register arrays for accumulation (thread-level tiling)
-    float reg_C[THREAD_TILE_M][THREAD_TILE_N] = {0.0f};
-    float reg_A[THREAD_TILE_M];
-    float reg_B[THREAD_TILE_N];
-
-    // Main computation loop over K dimension
-    for (int tile_k = 0; tile_k < K; tile_k += TILE_SIZE) {
-        // Collaboratively load tile from A
-#pragma unroll
-        for (int i = 0; i < THREAD_TILE_M; i++) {
-#pragma unroll
-            for (int j = 0; j < THREAD_TILE_N; j++) {
-                int global_row = row_base + i;
-                int global_col = tile_k + tx * THREAD_TILE_N + j;
-
-                if (global_row < M && global_col < K) {
-                    tile_A[ty * THREAD_TILE_M + i][tx * THREAD_TILE_N + j] =
-                            A[global_row * K + global_col];
-                } else {
-                    tile_A[ty * THREAD_TILE_M + i][tx * THREAD_TILE_N + j] = 0.0f;
-                }
-            }
+void print_matrix(float* m, int m_size)
+{
+    for(int i = 0; i < m_size; i++)
+    {
+        for(int j = 0; j < m_size; j++)
+        {
+            printf("%.2f ", m[i * m_size + j]);
         }
-
-        // Collaboratively load tile from B
-#pragma unroll
-        for (int i = 0; i < THREAD_TILE_M; i++) {
-#pragma unroll
-            for (int j = 0; j < THREAD_TILE_N; j++) {
-                int global_row = tile_k + ty * THREAD_TILE_M + i;
-                int global_col = col_base + j;
-
-                if (global_row < K && global_col < N) {
-                    tile_B[ty * THREAD_TILE_M + i][tx * THREAD_TILE_N + j] =
-                            B[global_row * N + global_col];
-                } else {
-                    tile_B[ty * THREAD_TILE_M + i][tx * THREAD_TILE_N + j] = 0.0f;
-                }
-            }
-        }
-
-        __syncthreads();
-
-#pragma unroll
-        for (int k = 0; k < TILE_SIZE; k++) {
-            // Load A values into registers
-#pragma unroll
-            for (int i = 0; i < THREAD_TILE_M; i++) {
-                reg_A[i] = tile_A[ty * THREAD_TILE_M + i][k];
-            }
-
-            // Load B values into registers
-#pragma unroll
-            for (int j = 0; j < THREAD_TILE_N; j++) {
-                reg_B[j] = tile_B[k][tx * THREAD_TILE_N + j];
-            }
-
-            // Compute outer product and accumulate
-#pragma unroll
-            for (int i = 0; i < THREAD_TILE_M; i++) {
-#pragma unroll
-                for (int j = 0; j < THREAD_TILE_N; j++) {
-                    reg_C[i][j] += reg_A[i] * reg_B[j];
-                }
-            }
-        }
-
-        __syncthreads();
+        cout << endl;
     }
 
-#pragma unroll
-    for (int i = 0; i < THREAD_TILE_M; i++) {
-#pragma unroll
-        for (int j = 0; j < THREAD_TILE_N; j++) {
-            int global_row = row_base + i;
-            int global_col = col_base + j;
+}
 
-            if (global_row < M && global_col < N) {
-                C[global_row * N + global_col] = reg_C[i][j];
+void check_matrix(const float* m1, const float* m2, int m_size, float precision = 0.0001)
+{
+    bool ret = true;
+    for(int i = 0; i < m_size; i++)
+    {
+        for(int j = 0; j < m_size; j++)
+        {
+            if(m1[i * m_size + j] - m2[i * m_size + j] > precision)
+            {
+                ret = false;
             }
+        }
+    }
+    if (ret)
+    {
+        cout << "The matrices are identical";
+    }
+    cout << endl;
+}
+
+void create_matrix(float* m, int m_size)
+{
+    std::random_device rd;
+    std::mt19937 gen(rd());
+    std::uniform_real_distribution<> distr(1,6); // distribution in range [1, 6]
+
+    for(int i = 0; i < m_size; i++)
+    {
+        for(int j = 0; j < m_size; j++)
+        {
+            m[i * m_size + j] = (float)distr(gen);
         }
     }
 }
 
-__global__ void optimized_matmul_kernel_vectorized(
-        const float* __restrict__ A,
-        const float* __restrict__ B,
-        float* __restrict__ C,
-        int M, int N, int K
-) {
-    // This implementation uses float4 for vectorized loads
-    // Simplified version - full implementation would handle alignment requirements
-
-    __shared__ float tile_A[TILE_SIZE][TILE_SIZE];
-    __shared__ float tile_B[TILE_SIZE][TILE_SIZE];
-
-    int tx = threadIdx.x;
-    int ty = threadIdx.y;
-    int row = blockIdx.y * TILE_SIZE + ty;
-    int col = blockIdx.x * TILE_SIZE + tx;
-
-    float sum = 0.0f;
-
-    for (int tile = 0; tile < (K + TILE_SIZE - 1) / TILE_SIZE; tile++) {
-        // Load with vectorized access where possible
-        int a_col = tile * TILE_SIZE + tx;
-        if (row < M && a_col < K) {
-            tile_A[ty][tx] = A[row * K + a_col];
-        } else {
-            tile_A[ty][tx] = 0.0f;
+void cpu_matmul(const float* A, const float* B, float* C, int m_size)
+{
+    for(int i = 0; i < m_size; i++)
+    {
+        for(int j = 0; j < m_size; j++)
+        {
+            float tmp = 0;
+            for(int k = 0; k < m_size; k++)
+            {
+                tmp += A[m_size * i + k] * B[k * m_size + j];
+            }
+            cout << m_size / BLOCK_SIZE + (m_size % BLOCK_SIZE > 0);
+            C[m_size * i + j] = tmp;
         }
-
-        int b_row = tile * TILE_SIZE + ty;
-        if (b_row < K && col < N) {
-            tile_B[ty][tx] = B[b_row * N + col];
-        } else {
-            tile_B[ty][tx] = 0.0f;
-        }
-
-        __syncthreads();
-
-#pragma unroll 16
-        for (int k = 0; k < TILE_SIZE; k++) {
-            sum += tile_A[ty][k] * tile_B[k][tx];
-        }
-
-        __syncthreads();
-    }
-
-    if (row < M && col < N) {
-        C[row * N + col] = sum;
     }
 }
 
-void optimized_matmul(
-        const float* h_A,
-        const float* h_B,
-        float* h_C,
-        int M, int N, int K
-) {
-    float *d_A, *d_B, *d_C;
+__global__ void ker1(const float* A, const float* B, float* C, int m_size)
+{
+    int col = blockDim.x * blockIdx.x + threadIdx.x;
+    int row = blockDim.y * blockIdx.y + threadIdx.y;
 
-    size_t size_A = M * K * sizeof(float);
-    size_t size_B = K * N * sizeof(float);
-    size_t size_C = M * N * sizeof(float);
+    if(col < m_size && row < m_size)
+    {
 
-    CHECK_CUDA(cudaMalloc(&d_A, size_A));
-    CHECK_CUDA(cudaMalloc(&d_B, size_B));
-    CHECK_CUDA(cudaMalloc(&d_C, size_C));
+        float tmp = 0;
+        for(int k = 0; k < m_size; k++)
+        {
+            tmp += A[row * m_size + k] * B[k * m_size + col];
+        }
+        C[m_size * row + col] = tmp;
 
-    CHECK_CUDA(cudaMemcpy(d_A, h_A, size_A, cudaMemcpyHostToDevice));
-    CHECK_CUDA(cudaMemcpy(d_B, h_B, size_B, cudaMemcpyHostToDevice));
+    }
 
-    dim3 blockDim(TILE_SIZE / THREAD_TILE_N, TILE_SIZE / THREAD_TILE_M);
-    dim3 gridDim(
-            (N + TILE_SIZE - 1) / TILE_SIZE,
-            (M + TILE_SIZE - 1) / TILE_SIZE
-    );
 
-    optimized_matmul_kernel<<<gridDim, blockDim>>>(d_A, d_B, d_C, M, N, K);
-    CHECK_CUDA(cudaGetLastError());
-    CHECK_CUDA(cudaDeviceSynchronize());
-
-    CHECK_CUDA(cudaMemcpy(h_C, d_C, size_C, cudaMemcpyDeviceToHost));
-
-    CHECK_CUDA(cudaFree(d_A));
-    CHECK_CUDA(cudaFree(d_B));
-    CHECK_CUDA(cudaFree(d_C));
 }
 
-float benchmark_optimized_matmul(int M, int N, int K, int num_runs = 10) {
-    float* h_A = new float[M * K];
-    float* h_B = new float[K * N];
-    float* h_C = new float[M * N];
+__global__ void ker2(const float* A, const float* B, float* C, int m_size) {
+    int col = BLOCK_SIZE * blockIdx.x + threadIdx.x / BLOCK_SIZE;
+    int row = BLOCK_SIZE * blockIdx.y + threadIdx.x % BLOCK_SIZE;
 
-    srand(42);
-    for (int i = 0; i < M * K; i++) h_A[i] = static_cast<float>(rand()) / RAND_MAX;
-    for (int i = 0; i < K * N; i++) h_B[i] = static_cast<float>(rand()) / RAND_MAX;
+    if(col < m_size && row < m_size)
+    {
 
-    // Warm up
-    optimized_matmul(h_A, h_B, h_C, M, N, K);
+        float tmp = 0;
+        for(int k = 0; k < m_size; k++)
+        {
+            tmp += A[row * m_size + k] * B[k * m_size + col];
+        }
+        C[m_size * row + col] = tmp;
 
-    // Benchmark
+    }
+
+}
+
+__global__ void ker3(const float* A, const float* B, float* C, int m_size) {
+    __shared__ float s_A[BLOCK_SIZE][BLOCK_SIZE];
+    __shared__ float s_B[BLOCK_SIZE][BLOCK_SIZE];
+
+    int col = BLOCK_SIZE * blockIdx.x + threadIdx.x;
+    int row = BLOCK_SIZE * blockIdx.y + threadIdx.y;
+
+    float tmp = 0;
+
+    for(int i = 0; i < m_size / BLOCK_SIZE + (m_size % BLOCK_SIZE > 0); i++)
+    {
+        int A_col = i * BLOCK_SIZE + threadIdx.x;
+        if (row < m_size && A_col < m_size)
+        {
+            s_A[threadIdx.x][threadIdx.y] = A[m_size * row + A_col];
+
+        }
+        else
+        {
+            s_A[threadIdx.x][threadIdx.y] = 0;
+        }
+
+        int B_row = i * BLOCK_SIZE + threadIdx.y;
+        if (B_row < m_size && col < m_size)
+        {
+            s_B[threadIdx.x][threadIdx.y] = B[m_size * B_row + col];
+
+        }
+        else
+        {
+            s_B[threadIdx.x][threadIdx.y] = 0;
+        }
+
+        for(int j = 0; j < BLOCK_SIZE; j++)
+        {
+            tmp = s_A[j][threadIdx.y] * s_B[threadIdx.x][j];
+        }
+
+    }
+
+    C[row * m_size + col] = tmp;
+
+
+}
+
+
+int main() {
+
+
+    int N = 4;
+    auto* h_A = new float[N * N];
+    auto* h_B = new float[N * N];
+    auto* h_C = new float[N * N];
+    auto* d_C_res = new float[N * N];
+
+    float* d_A;
+    float* d_B;
+    float* d_C;
+
+    cudaMalloc(&d_A, sizeof(float) * N * N);
+    cudaMalloc(&d_B, sizeof(float) * N * N);
+    cudaMalloc(&d_C, sizeof(float) * N * N);
+
+
+    dim3 grid_size( (N + BLOCK_SIZE) / BLOCK_SIZE, (N + BLOCK_SIZE) / BLOCK_SIZE);
+    dim3 block_size(BLOCK_SIZE, BLOCK_SIZE);
+    chrono::high_resolution_clock cl;
+
     auto start = chrono::high_resolution_clock::now();
+    create_matrix(h_A, N);
+    create_matrix(h_B, N);
+    cudaMemcpy(d_A, h_A, sizeof(float) * N * N, cudaMemcpyHostToDevice);
+    cudaMemcpy(d_B, h_B, sizeof(float) * N * N, cudaMemcpyHostToDevice);
 
-    for (int run = 0; run < num_runs; run++) {
-        optimized_matmul(h_A, h_B, h_C, M, N, K);
+
+    {
+        for(int i = 0; i < 1; i++)
+        {
+            cpu_matmul(h_A, h_B, h_C, N);
+        }
+        print_matrix(h_C, N);
+
+
     }
-
     auto end = chrono::high_resolution_clock::now();
-    auto duration = chrono::duration_cast<chrono::microseconds>(end - start);
+    float time_elapsed = (float)chrono::duration_cast<chrono::microseconds >(end - start).count();
+    cout << "CPU time: "<< time_elapsed << endl << endl;
 
-    float avg_time_ms = duration.count() / (1000.0f * num_runs);
+    start = chrono::high_resolution_clock::now();
+    {
+        for(int i = 0; i < 20; i++)
+        {
+            ker1<<<grid_size, block_size>>>(d_A, d_B, d_C, N);
+        }
+        cudaMemcpy(d_C_res, d_C, sizeof(float) * N * N, cudaMemcpyDeviceToHost);
+        print_matrix(d_C_res, N);
 
-    // Calculate GFLOPS
-    long long flops = 2LL * M * N * K;
-    float gflops = flops / (avg_time_ms * 1e6);
+    }
+    end = chrono::high_resolution_clock::now();
+    time_elapsed = (float)chrono::duration_cast<chrono::microseconds >(end - start).count();
+    cout << "ker1 time: " << time_elapsed << endl << endl;
 
-    cout << "Optimized CUDA - Size: " << M << "x" << N << "x" << K
-         << ", Time: " << avg_time_ms << " ms"
-         << ", Performance: " << gflops << " GFLOPS" << endl;
+    start = chrono::high_resolution_clock::now();
+    {
+        for(int i = 0; i < 20; i++)
+        {
+            ker2<<<grid_size, dim3(BLOCK_SIZE * BLOCK_SIZE)>>>(d_A, d_B, d_C, N);
+        }
+        cudaMemcpy(d_C_res, d_C, sizeof(float) * N * N, cudaMemcpyDeviceToHost);
+        print_matrix(d_C_res, N);
+
+
+    }
+    end = chrono::high_resolution_clock::now();
+    time_elapsed = (float)chrono::duration_cast<chrono::microseconds >(end - start).count();
+    cout << "ker2 time: " << time_elapsed << endl << endl;
+
+
+    start = chrono::high_resolution_clock::now();
+    {
+        for(int i = 0; i < 20; i++)
+        {
+            ker3<<<grid_size, block_size>>>(d_A, d_B, d_C, N);
+        }
+        cudaMemcpy(d_C_res, d_C, sizeof(float) * N * N, cudaMemcpyDeviceToHost);
+        print_matrix(d_C_res, N);
+
+
+    }
+    end = chrono::high_resolution_clock::now();
+    time_elapsed = (float)chrono::duration_cast<chrono::microseconds >(end - start).count();
+    cout << "ker3 time: " << time_elapsed << endl << endl;
+
+    cudaMemcpy(d_C_res, d_C, sizeof(float) * N * N, cudaMemcpyDeviceToHost);
+
+//    check_matrix(d_C_res, h_C, N);
+
+
 
     delete[] h_A;
     delete[] h_B;
     delete[] h_C;
-
-    return avg_time_ms;
-}
-
-void analyze_performance(int M, int N, int K, float time_ms) {
-
-    long long flops = 2LL * M * N * K;
-    long long memory_ops = (long long)(M * K + K * N + M * N) * sizeof(float);
-
-    float gflops = flops / (time_ms * 1e6);
-    float bandwidth_gb_s = memory_ops / (time_ms * 1e6);
-
-    cudaDeviceProp prop;
-    cudaGetDeviceProperties(&prop, 0);
-
-    cout << "\n=== Performance Analysis ===" << endl;
-    cout << "Achieved GFLOPS: " << gflops << endl;
-    cout << "Memory bandwidth: " << bandwidth_gb_s << " GB/s" << endl;
-    cout << "Peak memory bandwidth: " << prop.memoryBusWidth / 8.0 * prop.memoryClockRate * 2 / 1e6 << " GB/s" << endl;
-
-    // Calculate arithmetic intensity
-    float arithmetic_intensity = (float)flops / memory_ops;
-    cout << "Arithmetic intensity: " << arithmetic_intensity << " FLOPS/byte" << endl;
-}
-
-int main() {
-    cout << "=== Optimized CUDA Matrix Multiplication Benchmark ===" << endl;
-
-    cout << "Optimizations enabled:" << endl;
-    cout << "- Register blocking: " << THREAD_TILE_M << "x" << THREAD_TILE_N << endl;
-    cout << "- Shared memory tiling: " << TILE_SIZE << "x" << TILE_SIZE << endl;
-    cout << "- Loop unrolling: enabled" << endl;
-    cout << "- Bank conflict avoidance: enabled" << endl;
-    cout << endl;
-
-    // Test different sizes
-    int sizes[] = {128, 256, 512, 1024, 2048, 4096};
-    int num_sizes = sizeof(sizes) / sizeof(sizes[0]);
-
-    for (int i = 0; i < num_sizes; i++) {
-        int size = sizes[i];
-        float time_ms = benchmark_optimized_matmul(size, size, size);
-        analyze_performance(size, size, size, time_ms);
-        cout << endl;
-    }
-
+    delete[] d_C_res;
+    cudaFree(d_A);
+    cudaFree(d_B);
+    cudaFree(d_C);
     return 0;
 }
