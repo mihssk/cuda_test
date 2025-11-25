@@ -15,7 +15,6 @@ using namespace std;
 #define BLOCK_SIZE 32
 #define BLOCK_SPLIT_N 4
 #define SYNC_T __syncthreads();
-//#define N 64
 
 void print_matrix(double * m, int m_size)
 {
@@ -23,7 +22,7 @@ void print_matrix(double * m, int m_size)
     {
         for(int j = 0; j < m_size; j++)
         {
-            cout << setprecision(2) << to_string(m[i * m_size + j]);
+            cout << setprecision(2) << m[i * m_size + j] << " ";
         }
         cout << endl;
     }
@@ -73,7 +72,7 @@ void create_matrix(double * m, int m_size)
     }
 }
 
-void cpu_matmul(const double * A, const double * B, double * C, int m_size)
+void cpu_matmul(const double * A, double * C, int m_size)
 {
     for(int i = 0; i < m_size; i++)
     {
@@ -82,14 +81,14 @@ void cpu_matmul(const double * A, const double * B, double * C, int m_size)
             double tmp = 0;
             for(int k = 0; k < m_size; k++)
             {
-                tmp += A[m_size * i + k] * B[k * m_size + j];
+                tmp += A[m_size * i + k] * A[k * m_size + j];
             }
             C[m_size * i + j] = tmp;
         }
     }
 }
 
-__global__ void ker1(const double * A, const double * B, double * C, int m_size)
+__global__ void ker1(const double * A, double * C, int m_size)
 {
     int col = blockDim.x * blockIdx.x + threadIdx.x;
     int row = blockDim.y * blockIdx.y + threadIdx.y;
@@ -100,7 +99,7 @@ __global__ void ker1(const double * A, const double * B, double * C, int m_size)
         double tmp = 0;
         for(int k = 0; k < m_size; k++)
         {
-            tmp += A[row * m_size + k] * B[k * m_size + col];
+            tmp += A[row * m_size + k] * A[k * m_size + col];
         }
         C[m_size * row + col] = tmp;
 
@@ -109,7 +108,7 @@ __global__ void ker1(const double * A, const double * B, double * C, int m_size)
 
 }
 
-__global__ void ker2(const double * A, const double * B, double * C, int m_size) {
+__global__ void ker2(const double * A, double * C, int m_size) {
     int col = BLOCK_SIZE * blockIdx.x + threadIdx.x / BLOCK_SIZE;
     int row = BLOCK_SIZE * blockIdx.y + threadIdx.x % BLOCK_SIZE;
 
@@ -119,7 +118,7 @@ __global__ void ker2(const double * A, const double * B, double * C, int m_size)
         double tmp = 0;
         for(int k = 0; k < m_size; k++)
         {
-            tmp += A[row * m_size + k] * B[k * m_size + col];
+            tmp += A[row * m_size + k] * A[k * m_size + col];
         }
         C[m_size * row + col] = tmp;
 
@@ -127,7 +126,7 @@ __global__ void ker2(const double * A, const double * B, double * C, int m_size)
 
 }
 
-__global__ void ker3(const double * A, const double * B, double * C, int m_size) {
+__global__ void ker3(const double * A, double * C, int m_size) {
     __shared__ double s_A[BLOCK_SIZE][BLOCK_SIZE];
     __shared__ double s_B[BLOCK_SIZE][BLOCK_SIZE];
 
@@ -147,7 +146,7 @@ __global__ void ker3(const double * A, const double * B, double * C, int m_size)
 
             int B_row = i * BLOCK_SIZE + threadIdx.y;
             if (row < m_size && col < m_size) {
-                s_B[threadIdx.x][threadIdx.y] = B[m_size * B_row + col];
+                s_B[threadIdx.x][threadIdx.y] = A[m_size * B_row + col];
 
             } else {
                 s_B[threadIdx.x][threadIdx.y] = 0;
@@ -164,7 +163,7 @@ __global__ void ker3(const double * A, const double * B, double * C, int m_size)
     }
 }
 
-__global__ void ker3_v2(const double * A, const double * B, double * C, int m_size) {
+__global__ void ker3_v2(const double * A, double * C, int m_size) {
     __shared__ double s_A[BLOCK_SIZE * BLOCK_SIZE];
     __shared__ double s_B[BLOCK_SIZE * BLOCK_SIZE];
 
@@ -187,7 +186,7 @@ __global__ void ker3_v2(const double * A, const double * B, double * C, int m_si
 
             int B_row = i * BLOCK_SIZE + row;
             if (row < m_size && col < m_size) {
-                s_B[col + BLOCK_SIZE * row] = B[m_size * B_row + (col + BLOCK_SIZE * cCol)];
+                s_B[col + BLOCK_SIZE * row] = A[m_size * B_row + (col + BLOCK_SIZE * cCol)];
 
             } else {
                 s_B[col + BLOCK_SIZE * row] = 0;
@@ -204,7 +203,7 @@ __global__ void ker3_v2(const double * A, const double * B, double * C, int m_si
     }
 }
 
-__global__ void ker4(const double * A, const double * B, double * C, int m_size)
+__global__ void ker4(const double * A, double * C, int m_size)
 {
     __shared__ double s_A[BLOCK_SIZE][BLOCK_SIZE];
     __shared__ double s_B[BLOCK_SIZE][BLOCK_SIZE];
@@ -247,7 +246,7 @@ __global__ void ker4(const double * A, const double * B, double * C, int m_size)
                 int g_row = threadIdx.y * BLOCK_SPLIT_N + split_y + tile_i * BLOCK_SIZE;
                 if (g_col < m_size && g_row < m_size)
                 {
-                    s_B[threadIdx.x * BLOCK_SPLIT_N + split_x][threadIdx.y * BLOCK_SPLIT_N + split_y] = B[g_col + m_size * g_row];
+                    s_B[threadIdx.x * BLOCK_SPLIT_N + split_x][threadIdx.y * BLOCK_SPLIT_N + split_y] = A[g_col + m_size * g_row];
                 }
                 else
                 {
@@ -300,7 +299,7 @@ __global__ void ker4(const double * A, const double * B, double * C, int m_size)
 
 }
 
-__global__ void ker4_v2(const double * A, const double * B, double * C, int m_size)
+__global__ void ker4_v2(const double * A, double * C, int m_size)
 {
     __shared__ double s_A[BLOCK_SIZE * BLOCK_SIZE];
     __shared__ double s_B[BLOCK_SIZE * BLOCK_SIZE];
@@ -346,7 +345,7 @@ __global__ void ker4_v2(const double * A, const double * B, double * C, int m_si
                 int g_row = t_ind_y + split_y + tile_i * BLOCK_SIZE;
                 if (g_col < m_size && g_row < m_size)
                 {
-                    s_B[t_ind_x + split_x + BLOCK_SIZE * (t_ind_y + split_y)] = B[g_col + m_size * g_row];
+                    s_B[t_ind_x + split_x + BLOCK_SIZE * (t_ind_y + split_y)] = A[g_col + m_size * g_row];
                 }
                 else
                 {
@@ -400,25 +399,21 @@ __global__ void ker4_v2(const double * A, const double * B, double * C, int m_si
 
 int main() {
 
-    vector<int> Ns = {4, 8, 16, 32, 64, 128, 256, 400, 512, 1024};
-    int N = 1024;
+    int N = 2048;
     int N_b = 33;
 
     ofstream out;
-    out.open("../Results/Results" + to_string(N) + ".txt");
+    out.open("../Results/Results_AxA" + to_string(N) + ".txt");
 
     out << "Begin check matmul for " + to_string(N) + "x" + to_string(N) + " matrices" << endl;
     auto* h_A = new double [N * N];
-    auto* h_B = new double [N * N];
     auto* h_C = new double [N * N];
     auto* d_C_res = new double [N * N];
 
     double * d_A;
-    double * d_B;
     double * d_C;
 
     cudaMalloc(&d_A, sizeof(double ) * N * N);
-    cudaMalloc(&d_B, sizeof(double ) * N * N);
     cudaMalloc(&d_C, sizeof(double ) * N * N);
 
 
@@ -429,22 +424,18 @@ int main() {
     out << "block: " << block_size.x << "x" << block_size.y << endl << endl;
 
     create_matrix(h_A, N);
-    create_matrix(h_B, N);
     if(N < N_b) {
         cout << "A" << endl;
         print_matrix(h_A, N);
-        cout << "B" << endl;
-        print_matrix(h_B, N);
     }
 
     cudaMemcpy(d_A, h_A, sizeof(double ) * N * N, cudaMemcpyHostToDevice);
-    cudaMemcpy(d_B, h_B, sizeof(double ) * N * N, cudaMemcpyHostToDevice);
 
     auto start = chrono::high_resolution_clock::now();
     {
         for(int i = 0; i < 1; i++)
         {
-            cpu_matmul(h_A, h_B, h_C, N);
+            cpu_matmul(h_A, h_C, N);
         }
 
     }
@@ -461,7 +452,7 @@ int main() {
     {
         for(int i = 0; i < 20; i++)
         {
-            ker1<<<grid_size, block_size>>>(d_A, d_B, d_C, N);
+            ker1<<<grid_size, block_size>>>(d_A, d_C, N);
         }
     }
     end = chrono::high_resolution_clock::now();
@@ -480,7 +471,7 @@ int main() {
     {
         for(int i = 0; i < 20; i++)
         {
-            ker2<<<grid_size, dim3(BLOCK_SIZE * BLOCK_SIZE)>>>(d_A, d_B, d_C, N);
+            ker2<<<grid_size, dim3(BLOCK_SIZE * BLOCK_SIZE)>>>(d_A, d_C, N);
         }
     }
     end = chrono::high_resolution_clock::now();
@@ -498,7 +489,7 @@ int main() {
     {
         for(int i = 0; i < 20; i++)
         {
-            ker3<<<grid_size, block_size>>>(d_A, d_B, d_C, N);
+            ker3<<<grid_size, block_size>>>(d_A, d_C, N);
         }
     }
     end = chrono::high_resolution_clock::now();
@@ -516,7 +507,7 @@ int main() {
     {
         for(int i = 0; i < 20; i++)
         {
-            ker3_v2<<<grid_size, BLOCK_SIZE * BLOCK_SIZE>>>(d_A, d_B, d_C, N);
+            ker3_v2<<<grid_size, BLOCK_SIZE * BLOCK_SIZE>>>(d_A, d_C, N);
         }
     }
     end = chrono::high_resolution_clock::now();
@@ -534,7 +525,7 @@ int main() {
     {
         for(int i = 0; i < 20; i++)
         {
-            ker4<<<grid_size, dim3(BLOCK_SIZE / BLOCK_SPLIT_N, BLOCK_SIZE / BLOCK_SPLIT_N)>>>(d_A, d_B, d_C, N);
+            ker4<<<grid_size, dim3(BLOCK_SIZE / BLOCK_SPLIT_N, BLOCK_SIZE / BLOCK_SPLIT_N)>>>(d_A, d_C, N);
         }
     }
     end = chrono::high_resolution_clock::now();
@@ -552,7 +543,7 @@ int main() {
     {
         for(int i = 0; i < 20; i++)
         {
-            ker4_v2<<<grid_size, dim3(BLOCK_SIZE / BLOCK_SPLIT_N * BLOCK_SIZE / BLOCK_SPLIT_N)>>>(d_A, d_B, d_C, N);
+            ker4_v2<<<grid_size, dim3(BLOCK_SIZE / BLOCK_SPLIT_N * BLOCK_SIZE / BLOCK_SPLIT_N)>>>(d_A, d_C, N);
         }
     }
     end = chrono::high_resolution_clock::now();
@@ -570,11 +561,9 @@ int main() {
 
     out.close();
     delete[] h_A;
-    delete[] h_B;
     delete[] h_C;
     delete[] d_C_res;
     cudaFree(d_A);
-    cudaFree(d_B);
     cudaFree(d_C);
 
 

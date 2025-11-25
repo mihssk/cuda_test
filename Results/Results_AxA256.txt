@@ -1,0 +1,31 @@
+Begin check matmul for 256x256 matrices
+grid: 8x8
+block: 32x32
+
+CPU time: 0.0804
+
+ker1 time: 0.000139
+The matrices cpu and ker1 are identical
+Error: -7.61702e-12
+
+ker2 time: 6.9e-05
+The matrices cpu and ker2 are identical
+Error: -7.61702e-12
+
+ker3 time: 7.1e-05
+The matrices cpu and ker3 are identical
+Error: -7.61702e-12
+
+ker3_v2 time: 7.1e-05
+The matrices cpu and ker3_v2 are identical
+Error: -7.61702e-12
+
+ker4 time: 6.9e-05
+The matrices cpu and ker4 are identical
+Error: -7.61702e-12
+
+ker4_v2 time: 7.3e-05
+The matrices cpu and ker4_v2 are identical
+Error: -7.61702e-12
+
+End check matmul for 256x256 matrices

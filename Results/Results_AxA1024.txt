@@ -1,0 +1,31 @@
+Begin check matmul for 1024x1024 matrices
+grid: 32x32
+block: 32x32
+
+CPU time: 14.4362
+
+ker1 time: 0.000123
+The matrices cpu and ker1 are identical
+Error: 4.8567e-10
+
+ker2 time: 6.7e-05
+The matrices cpu and ker2 are identical
+Error: 4.8567e-10
+
+ker3 time: 7.2e-05
+The matrices cpu and ker3 are identical
+Error: 4.8567e-10
+
+ker3_v2 time: 7.1e-05
+The matrices cpu and ker3_v2 are identical
+Error: 4.8567e-10
+
+ker4 time: 7.7e-05
+The matrices cpu and ker4 are identical
+Error: 4.8567e-10
+
+ker4_v2 time: 8.1e-05
+The matrices cpu and ker4_v2 are identical
+Error: 4.8567e-10
+
+End check matmul for 1024x1024 matrices

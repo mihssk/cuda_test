@@ -1,0 +1,31 @@
+Begin check matmul for 512x512 matrices
+grid: 16x16
+block: 32x32
+
+CPU time: 0.871914
+
+ker1 time: 0.00013
+The matrices cpu and ker1 are identical
+Error: -5.91172e-11
+
+ker2 time: 7.7e-05
+The matrices cpu and ker2 are identical
+Error: -5.91172e-11
+
+ker3 time: 6.9e-05
+The matrices cpu and ker3 are identical
+Error: -5.91172e-11
+
+ker3_v2 time: 6.9e-05
+The matrices cpu and ker3_v2 are identical
+Error: -5.91172e-11
+
+ker4 time: 8.6e-05
+The matrices cpu and ker4 are identical
+Error: -5.91172e-11
+
+ker4_v2 time: 0.000213
+The matrices cpu and ker4_v2 are identical
+Error: -5.91172e-11
+
+End check matmul for 512x512 matrices

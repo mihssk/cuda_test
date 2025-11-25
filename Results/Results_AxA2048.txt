@@ -1,0 +1,31 @@
+Begin check matmul for 2048x2048 matrices
+grid: 64x64
+block: 32x32
+
+CPU time: 161.999
+
+ker1 time: 0.000156
+The matrices cpu and ker1 are identical
+Error: -1.40972e-10
+
+ker2 time: 7.5e-05
+The matrices cpu and ker2 are identical
+Error: -1.40972e-10
+
+ker3 time: 8e-05
+The matrices cpu and ker3 are identical
+Error: -1.40972e-10
+
+ker3_v2 time: 9.3e-05
+The matrices cpu and ker3_v2 are identical
+Error: -1.40972e-10
+
+ker4 time: 6.9e-05
+The matrices cpu and ker4 are identical
+Error: -1.40972e-10
+
+ker4_v2 time: 7.2e-05
+The matrices cpu and ker4_v2 are identical
+Error: -1.40972e-10
+
+End check matmul for 2048x2048 matrices
