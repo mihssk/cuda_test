@@ -3,13 +3,15 @@
 #include <chrono>
 #include <random>
 #include <string>
+#include <fstream>
+#include <sstream>
 using namespace std;
 
 
 #define BLOCK_SIZE 32
 #define BLOCK_SPLIT_N 4
 #define SYNC_T __syncthreads();
-#define N 512
+#define N 64
 
 void print_matrix(double * m, int m_size)
 {
@@ -24,7 +26,7 @@ void print_matrix(double * m, int m_size)
 
 }
 
-void check_matrix(const double * m1, const double * m2, int m_size, const string& nm1, const string& nm2, double precision = 0.001)
+void check_matrix(const double * m1, const double * m2, int m_size, const string& nm1, const string& nm2, ofstream& f, double precision = 0.001)
 {
     bool ret = true;
     int p = 1;
@@ -39,7 +41,7 @@ void check_matrix(const double * m1, const double * m2, int m_size, const string
                 ret = false;
                 if (p < 15)
                 {
-                    cout << i << " " << j << " " << m1[i * m_size + j] - m2[i * m_size + j] << "|";
+                    f << i << " " << j << " " << m1[i * m_size + j] - m2[i * m_size + j] << "|";
                     p++;
                 }
             }
@@ -47,9 +49,9 @@ void check_matrix(const double * m1, const double * m2, int m_size, const string
     }
     if (ret)
     {
-        cout << "The matrices " << nm1 + " and " << nm2 << " are identical" << endl;
+        f << "The matrices " << nm1 + " and " << nm2 << " are identical" << endl;
     }
-    cout << "Error: " <<  err << endl;
+    f << "Error: " <<  err << endl << endl;
 }
 
 void create_matrix(double * m, int m_size)
@@ -96,7 +98,7 @@ __global__ void ker1(const double * A, const double * B, double * C, int m_size)
         {
             tmp += A[row * m_size + k] * B[k * m_size + col];
         }
-        C[m_size * row + col] = tmp;
+        C[m_size * row + col] = tmp + 1;
 
     }
 
@@ -115,7 +117,7 @@ __global__ void ker2(const double * A, const double * B, double * C, int m_size)
         {
             tmp += A[row * m_size + k] * B[k * m_size + col];
         }
-        C[m_size * row + col] = tmp;
+        C[m_size * row + col] = tmp + 2;
 
     }
 
@@ -154,7 +156,7 @@ __global__ void ker3(const double * A, const double * B, double * C, int m_size)
             SYNC_T
 
         }
-        C[row * m_size + col] = tmp;
+        C[row * m_size + col] = tmp + 3;
     }
 }
 
@@ -194,9 +196,10 @@ __global__ void ker3_v2(const double * A, const double * B, double * C, int m_si
             SYNC_T
 
         }
-        C[(row + BLOCK_SIZE * cRow) * m_size + (col + BLOCK_SIZE * cCol)] = tmp;
+        C[(row + BLOCK_SIZE * cRow) * m_size + (col + BLOCK_SIZE * cCol)] = tmp + 4;
     }
 }
+
 __global__ void ker4(const double * A, const double * B, double * C, int m_size)
 {
     __shared__ double s_A[BLOCK_SIZE][BLOCK_SIZE];
@@ -210,8 +213,10 @@ __global__ void ker4(const double * A, const double * B, double * C, int m_size)
     int b_row = blockIdx.y * BLOCK_SIZE + threadIdx.y * BLOCK_SPLIT_N;
     for(int tile_i = 0; tile_i < m_size / BLOCK_SIZE + (m_size % BLOCK_SIZE > 0); tile_i++)
     {
+        #pragma unroll
         for(int split_x = 0; split_x < BLOCK_SPLIT_N; split_x++)
         {
+            #pragma unroll
             for(int split_y = 0; split_y < BLOCK_SPLIT_N; split_y++)
             {
                 int g_col = threadIdx.x * BLOCK_SPLIT_N + split_x + tile_i * BLOCK_SIZE;
@@ -228,9 +233,10 @@ __global__ void ker4(const double * A, const double * B, double * C, int m_size)
             }
 
         }
-
+        #pragma unroll
         for(int split_x = 0; split_x < BLOCK_SPLIT_N; split_x++)
         {
+            #pragma unroll
             for(int split_y = 0; split_y < BLOCK_SPLIT_N; split_y++)
             {
                 int g_col = (b_col + split_x);
@@ -249,17 +255,19 @@ __global__ void ker4(const double * A, const double * B, double * C, int m_size)
 
         }
         SYNC_T
-
+        #pragma unroll
         for(int k = 0; k < BLOCK_SIZE; k++)
         {
+            #pragma unroll
             for(int i = 0; i < BLOCK_SPLIT_N; i++)
             {
                 reg_A[i] = s_A[k][threadIdx.y * BLOCK_SPLIT_N + i];
                 reg_B[i] = s_B[threadIdx.x * BLOCK_SPLIT_N + i][k];
             }
-
+            #pragma unroll
             for(int i = 0; i < BLOCK_SPLIT_N; i++)
             {
+                #pragma unroll
                 for(int j = 0; j < BLOCK_SPLIT_N; j++)
                 {
                     reg_C[j][i] += reg_A[i] * reg_B[j];
@@ -270,13 +278,15 @@ __global__ void ker4(const double * A, const double * B, double * C, int m_size)
         SYNC_T
 
     }
+    #pragma unroll
     for(int i = 0; i < BLOCK_SPLIT_N; i++)
     {
+        #pragma unroll
         for(int j = 0; j < BLOCK_SPLIT_N; j++)
         {
             if ((b_row + j) < m_size && (b_col + i) < m_size)
             {
-                C[b_col + i + (b_row + j) * m_size]= reg_C[i][j];
+                C[b_col + i + (b_row + j) * m_size]= reg_C[i][j] + 5;
             }
 
 
@@ -286,8 +296,108 @@ __global__ void ker4(const double * A, const double * B, double * C, int m_size)
 
 }
 
+__global__ void ker4_v2(const double * A, const double * B, double * C, int m_size)
+{
+    __shared__ double s_A[BLOCK_SIZE * BLOCK_SIZE];
+    __shared__ double s_B[BLOCK_SIZE * BLOCK_SIZE];
+
+    double reg_C[BLOCK_SPLIT_N * BLOCK_SPLIT_N] = {0.0f};
+    double reg_A[BLOCK_SPLIT_N];
+    double reg_B[BLOCK_SPLIT_N];
+
+    int t_ind_x = threadIdx.x % BLOCK_SPLIT_N * BLOCK_SPLIT_N;
+    int t_ind_y = threadIdx.x / BLOCK_SPLIT_N * BLOCK_SPLIT_N;
+    int b_col = blockIdx.x * BLOCK_SIZE + t_ind_x;
+    int b_row = blockIdx.y * BLOCK_SIZE + t_ind_y;
+
+    for(int tile_i = 0; tile_i < m_size / BLOCK_SIZE + (m_size % BLOCK_SIZE > 0); tile_i++)
+    {
+#pragma unroll
+        for(int split_x = 0; split_x < BLOCK_SPLIT_N; split_x++)
+        {
+#pragma unroll
+            for(int split_y = 0; split_y < BLOCK_SPLIT_N; split_y++)
+            {
+                int g_col = t_ind_x + split_x + tile_i * BLOCK_SIZE;
+                int g_row = (b_row + split_y);
+                if (g_col < m_size && g_row < m_size)
+                {
+                    s_A[t_ind_x + split_x + BLOCK_SIZE * (t_ind_y + split_y)] = A[g_col + m_size * g_row];
+                }
+                else
+                {
+                    s_A[t_ind_x + split_x + BLOCK_SIZE * (t_ind_y + split_y)] = 0;
+                }
+
+            }
+
+        }
+#pragma unroll
+        for(int split_x = 0; split_x < BLOCK_SPLIT_N; split_x++)
+        {
+#pragma unroll
+            for(int split_y = 0; split_y < BLOCK_SPLIT_N; split_y++)
+            {
+                int g_col = (b_col + split_x);
+                int g_row = t_ind_y + split_y + tile_i * BLOCK_SIZE;
+                if (g_col < m_size && g_row < m_size)
+                {
+                    s_B[t_ind_x + split_x + BLOCK_SIZE * (t_ind_y + split_y)] = B[g_col + m_size * g_row];
+                }
+                else
+                {
+                    s_B[t_ind_x  + split_x + BLOCK_SIZE * (t_ind_y + split_y)] = 0;
+                }
+
+            }
+
+
+        }
+        SYNC_T
+#pragma unroll
+        for(int k = 0; k < BLOCK_SIZE; k++)
+        {
+#pragma unroll
+            for(int i = 0; i < BLOCK_SPLIT_N; i++)
+            {
+                reg_A[i] = s_A[k + BLOCK_SPLIT_N * t_ind_y+ i];
+                reg_B[i] = s_B[t_ind_x + i + k * BLOCK_SPLIT_N];
+            }
+#pragma unroll
+            for(int i = 0; i < BLOCK_SPLIT_N; i++)
+            {
+#pragma unroll
+                for(int j = 0; j < BLOCK_SPLIT_N; j++)
+                {
+                    reg_C[j + i * BLOCK_SPLIT_N] += reg_A[i] * reg_B[j];
+                }
+            }
+
+        }
+        SYNC_T
+
+    }
+#pragma unroll
+    for(int i = 0; i < BLOCK_SPLIT_N; i++)
+    {
+#pragma unroll
+        for(int j = 0; j < BLOCK_SPLIT_N; j++)
+        {
+            if ((b_row + j) < m_size && (b_col + i) < m_size)
+            {
+                C[b_col + i + (b_row + j) * m_size]= reg_C[i + BLOCK_SPLIT_N * j] + 6;
+            }
+
+
+        }
+    }
+
+}
+
 int main() {
 
+    ofstream out;
+    out.open("../Results" + to_string(N) + " with_offset" + ".txt");
 
 //    int N = 8;
     auto* h_A = new double [N * N];
@@ -307,8 +417,8 @@ int main() {
     dim3 grid_size( (N + BLOCK_SIZE - 1) / BLOCK_SIZE, (N + BLOCK_SIZE - 1) / BLOCK_SIZE);
     dim3 block_size(BLOCK_SIZE, BLOCK_SIZE);
     chrono::high_resolution_clock cl;
-    cout << "grid: " << grid_size.x << "x" << grid_size.y << endl;
-    cout << "block: " << block_size.x << "x" << block_size.y << endl;
+    out << "grid: " << grid_size.x << "x" << grid_size.y << endl;
+    out << "block: " << block_size.x << "x" << block_size.y << endl << endl;
     auto start = chrono::high_resolution_clock::now();
     create_matrix(h_A, N);
     create_matrix(h_B, N);
@@ -327,7 +437,7 @@ int main() {
     }
     auto end = chrono::high_resolution_clock::now();
     double time_elapsed = (double )chrono::duration_cast<chrono::microseconds >(end - start).count();
-    cout << "CPU time: "<< time_elapsed / 1000000 << endl << endl;
+    out << "CPU time: "<< time_elapsed / 1000000 << endl << endl;
 
     start = chrono::high_resolution_clock::now();
     {
@@ -343,8 +453,8 @@ int main() {
     time_elapsed = (double )chrono::duration_cast<chrono::microseconds >(end - start).count();
 
 
-    cout << "ker1 time: " << time_elapsed / 1000000 << endl << endl;
-    check_matrix(d_C_res, h_C, N, "cpu", "ker1");
+    out << "ker1 time: " << time_elapsed / 1000000 << endl;
+    check_matrix(d_C_res, h_C, N, "cpu", "ker1", out);
 
     start = chrono::high_resolution_clock::now();
     {
@@ -362,8 +472,8 @@ int main() {
     time_elapsed = (double )chrono::duration_cast<chrono::microseconds >(end - start).count();
 
 
-    cout << "ker2 time: " << time_elapsed / 1000000 << endl << endl;
-    check_matrix(d_C_res, h_C, N, "cpu", "ker2");
+    out << "ker2 time: " << time_elapsed / 1000000 << endl;
+    check_matrix(d_C_res, h_C, N, "cpu", "ker2", out);
 
     start = chrono::high_resolution_clock::now();
     {
@@ -379,8 +489,8 @@ int main() {
     }
     end = chrono::high_resolution_clock::now();
     time_elapsed = (double )chrono::duration_cast<chrono::microseconds >(end - start).count();
-    cout << "ker3 time: " << time_elapsed / 1000000 << endl << endl;
-    check_matrix(d_C_res, h_C, N, "cpu", "ker3");
+    out << "ker3 time: " << time_elapsed / 1000000 << endl;
+    check_matrix(d_C_res, h_C, N, "cpu", "ker3", out);
 
     start = chrono::high_resolution_clock::now();
     {
@@ -394,8 +504,8 @@ int main() {
     }
     end = chrono::high_resolution_clock::now();
     time_elapsed = (double )chrono::duration_cast<chrono::microseconds >(end - start).count();
-    cout << "ker3_v2 time: " << time_elapsed / 1000000 << endl << endl;
-    check_matrix(d_C_res, h_C, N, "cpu", "ker3_v2");
+    out << "ker3_v2 time: " << time_elapsed / 1000000 << endl;
+    check_matrix(d_C_res, h_C, N, "cpu", "ker3_v2", out);
 
     start = chrono::high_resolution_clock::now();
     {
@@ -410,8 +520,24 @@ int main() {
 
     end = chrono::high_resolution_clock::now();
     time_elapsed = (double )chrono::duration_cast<chrono::microseconds >(end - start).count();
-    cout << "ker4 time: " << time_elapsed / 1000000 << endl << endl;
-    check_matrix(d_C_res, h_C, N, "cpu", "ker4");
+    out << "ker4 time: " << time_elapsed / 1000000 << endl;
+    check_matrix(d_C_res, h_C, N, "cpu", "ker4", out);
+
+    start = chrono::high_resolution_clock::now();
+    {
+        for(int i = 0; i < 20; i++)
+        {
+            ker4_v2<<<grid_size, dim3(BLOCK_SIZE / BLOCK_SPLIT_N * BLOCK_SIZE / BLOCK_SPLIT_N)>>>(d_A, d_B, d_C, N);
+        }
+        cudaMemcpy(d_C_res, d_C, sizeof(double ) * N * N, cudaMemcpyDeviceToHost);
+
+//        print_matrix(d_C_res, N);
+    }
+
+    end = chrono::high_resolution_clock::now();
+    time_elapsed = (double )chrono::duration_cast<chrono::microseconds >(end - start).count();
+    out << "ker4_v2 time: " << time_elapsed / 1000000 << endl;
+    check_matrix(d_C_res, h_C, N, "cpu", "ker4_v2", out);
 
     delete[] h_A;
     delete[] h_B;
@@ -420,5 +546,6 @@ int main() {
     cudaFree(d_A);
     cudaFree(d_B);
     cudaFree(d_C);
+    out.close();
     return 0;
 }
