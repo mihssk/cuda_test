@@ -2,30 +2,30 @@ Begin check matmul for 8x8 matrices
 grid: 1x1
 block: 32x32
 
-CPU time: 2.5e-05
+CPU time: 2e-06
 
-ker1 time: 5.3e-05
+ker1 time: 0.000108
 The matrices cpu and ker1 are identical
-Error: -7173.83
+Error: -7.10543e-15
 
-ker2 time: 5e-05
+ker2 time: 5.5e-05
 The matrices cpu and ker2 are identical
-Error: -7173.83
+Error: -7.10543e-15
 
-ker3 time: 5.2e-05
+ker3 time: 7.7e-05
 The matrices cpu and ker3 are identical
-Error: -7173.83
+Error: -7.10543e-15
 
-ker3_v2 time: 5e-05
+ker3_v2 time: 7.3e-05
 The matrices cpu and ker3_v2 are identical
-Error: -7173.83
+Error: -7.10543e-15
 
-ker4 time: 5e-05
+ker4 time: 7.2e-05
 The matrices cpu and ker4 are identical
-Error: -7173.83
+Error: -7.10543e-15
 
-ker4_v2 time: 5e-05
+ker4_v2 time: 6.4e-05
 The matrices cpu and ker4_v2 are identical
-Error: -7173.83
+Error: -7.10543e-15
 
 End check matmul for 8x8 matrices

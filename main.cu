@@ -15,7 +15,7 @@ using namespace std;
 #define BLOCK_SIZE 32
 #define BLOCK_SPLIT_N 4
 #define SYNC_T __syncthreads();
-//#define N 64
+
 
 void print_matrix(double * m, int m_size)
 {
@@ -23,7 +23,7 @@ void print_matrix(double * m, int m_size)
     {
         for(int j = 0; j < m_size; j++)
         {
-            cout << setprecision(2) << to_string(m[i * m_size + j]);
+            cout << setprecision(4) << to_string(m[i * m_size + j]) << " ";
         }
         cout << endl;
     }
@@ -175,33 +175,32 @@ __global__ void ker3_v2(const double * A, const double * B, double * C, int m_si
     int cCol = blockIdx.y;
 
     double tmp = 0.0f;
-    if (row < m_size && col < m_size) {
-        for (int i = 0; i < m_size / BLOCK_SIZE + (m_size % BLOCK_SIZE > 0); i++) {
-            int A_col = i * BLOCK_SIZE + col;
-            if (row < m_size && A_col < m_size) {
-                s_A[col + row * BLOCK_SIZE] = A[m_size * (row + BLOCK_SIZE * cRow)  + A_col];
 
-            } else {
-                s_A[col + row * BLOCK_SIZE] = 0;
-            }
+    for (int i = 0; i < m_size / BLOCK_SIZE + (m_size % BLOCK_SIZE > 0); i++) {
+        int A_col = i * BLOCK_SIZE + col;
+        if (row + BLOCK_SIZE * cRow < m_size && A_col < m_size) {
+            s_A[col + row * BLOCK_SIZE] = A[m_size * (row + BLOCK_SIZE * cRow)  + A_col];
 
-            int B_row = i * BLOCK_SIZE + row;
-            if (row < m_size && col < m_size) {
-                s_B[col + BLOCK_SIZE * row] = B[m_size * B_row + (col + BLOCK_SIZE * cCol)];
-
-            } else {
-                s_B[col + BLOCK_SIZE * row] = 0;
-            }
-            SYNC_T
-
-            for (int j = 0; j < BLOCK_SIZE; j++) {
-                tmp += s_A[j + row * BLOCK_SIZE] * s_B[col + j * BLOCK_SIZE];
-            }
-            SYNC_T
-
+        } else {
+            s_A[col + row * BLOCK_SIZE] = 0;
         }
-        C[(row + BLOCK_SIZE * cRow) * m_size + (col + BLOCK_SIZE * cCol)] = tmp;
+
+        int B_row = i * BLOCK_SIZE + row;
+        if (B_row < m_size && (col + BLOCK_SIZE * cCol) < m_size) {
+            s_B[col + BLOCK_SIZE * row] = B[m_size * B_row + (col + BLOCK_SIZE * cCol)];
+
+        } else {
+            s_B[col + BLOCK_SIZE * row] = 0;
+        }
+        SYNC_T
+
+        for (int j = 0; j < BLOCK_SIZE; j++) {
+            tmp += s_A[j + row * BLOCK_SIZE] * s_B[col + j * BLOCK_SIZE];
+        }
+        SYNC_T
+
     }
+
 }
 
 __global__ void ker4(const double * A, const double * B, double * C, int m_size)
@@ -401,8 +400,8 @@ __global__ void ker4_v2(const double * A, const double * B, double * C, int m_si
 int main() {
 
     vector<int> Ns = {4, 8, 16, 32, 64, 128, 256, 400, 512, 1024};
-    int N = 1024;
-    int N_b = 33;
+    int N = 500;
+    int N_b = 17;
 
     ofstream out;
     out.open("../Results/Results" + to_string(N) + ".txt");

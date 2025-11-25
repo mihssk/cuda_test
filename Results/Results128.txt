@@ -2,30 +2,30 @@ Begin check matmul for 128x128 matrices
 grid: 4x4
 block: 32x32
 
-CPU time: 0.009486
+CPU time: 0.005938
 
-ker1 time: 7e-05
+ker1 time: 0.000105
 The matrices cpu and ker1 are identical
-Error: -2.57526e+07
+Error: 6.30962e-12
 
-ker2 time: 5.2e-05
+ker2 time: 4.6e-05
 The matrices cpu and ker2 are identical
-Error: -2.57526e+07
+Error: 6.30962e-12
 
-ker3 time: 5.1e-05
+ker3 time: 6.8e-05
 The matrices cpu and ker3 are identical
-Error: -2.57526e+07
+Error: 6.30962e-12
 
-ker3_v2 time: 5.1e-05
+ker3_v2 time: 6.2e-05
 The matrices cpu and ker3_v2 are identical
-Error: -2.57526e+07
+Error: 6.30962e-12
 
-ker4 time: 5e-05
+ker4 time: 4.3e-05
 The matrices cpu and ker4 are identical
-Error: -2.57526e+07
+Error: 6.30962e-12
 
-ker4_v2 time: 5e-05
+ker4_v2 time: 4.1e-05
 The matrices cpu and ker4_v2 are identical
-Error: -2.57526e+07
+Error: 6.30962e-12
 
 End check matmul for 128x128 matrices

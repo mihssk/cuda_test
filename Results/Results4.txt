@@ -2,30 +2,30 @@ Begin check matmul for 4x4 matrices
 grid: 1x1
 block: 32x32
 
-CPU time: 0.00052
+CPU time: 0
 
-ker1 time: 0.000254
+ker1 time: 0.000113
 The matrices cpu and ker1 are identical
-Error: 2.84217e-14
+Error: -1.77636e-15
 
-ker2 time: 0.000116
+ker2 time: 7.8e-05
 The matrices cpu and ker2 are identical
-Error: 2.84217e-14
+Error: -1.77636e-15
 
-ker3 time: 0.000129
+ker3 time: 0.000605
 The matrices cpu and ker3 are identical
-Error: 2.84217e-14
+Error: -1.77636e-15
 
-ker3_v2 time: 0.000124
+ker3_v2 time: 0.000153
 The matrices cpu and ker3_v2 are identical
-Error: 2.84217e-14
+Error: -1.77636e-15
 
-ker4 time: 0.000973
+ker4 time: 8e-05
 The matrices cpu and ker4 are identical
-Error: 2.84217e-14
+Error: -1.77636e-15
 
-ker4_v2 time: 0.200161
+ker4_v2 time: 8.4e-05
 The matrices cpu and ker4_v2 are identical
-Error: 2.84217e-14
+Error: -1.77636e-15
 
 End check matmul for 4x4 matrices
