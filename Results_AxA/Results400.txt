@@ -1,0 +1,31 @@
+Begin check matmul for 400x400 matrices
+grid: 13x13
+block: 32x32
+
+CPU time: 0.352833
+
+ker1 time: 6.7e-05
+The matrices cpu and ker1 are identical
+Error: -7.83783e+08
+
+ker2 time: 5.4e-05
+The matrices cpu and ker2 are identical
+Error: -7.83783e+08
+
+ker3 time: 7.9e-05
+The matrices cpu and ker3 are identical
+Error: -7.83783e+08
+
+ker3_v2 time: 0.000111
+The matrices cpu and ker3_v2 are identical
+Error: -7.83783e+08
+
+ker4 time: 7.6e-05
+The matrices cpu and ker4 are identical
+Error: -7.83783e+08
+
+ker4_v2 time: 7.6e-05
+The matrices cpu and ker4_v2 are identical
+Error: -7.83783e+08
+
+End check matmul for 400x400 matrices

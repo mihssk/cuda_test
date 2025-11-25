@@ -11,7 +11,7 @@ using namespace std;
 #define BLOCK_SIZE 32
 #define BLOCK_SPLIT_N 4
 #define SYNC_T __syncthreads();
-#define N 64
+//#define N 64
 
 void print_matrix(double * m, int m_size)
 {
@@ -98,7 +98,7 @@ __global__ void ker1(const double * A, const double * B, double * C, int m_size)
         {
             tmp += A[row * m_size + k] * B[k * m_size + col];
         }
-        C[m_size * row + col] = tmp + 1;
+        C[m_size * row + col] = tmp;
 
     }
 
@@ -117,7 +117,7 @@ __global__ void ker2(const double * A, const double * B, double * C, int m_size)
         {
             tmp += A[row * m_size + k] * B[k * m_size + col];
         }
-        C[m_size * row + col] = tmp + 2;
+        C[m_size * row + col] = tmp;
 
     }
 
@@ -156,7 +156,7 @@ __global__ void ker3(const double * A, const double * B, double * C, int m_size)
             SYNC_T
 
         }
-        C[row * m_size + col] = tmp + 3;
+        C[row * m_size + col] = tmp;
     }
 }
 
@@ -196,7 +196,7 @@ __global__ void ker3_v2(const double * A, const double * B, double * C, int m_si
             SYNC_T
 
         }
-        C[(row + BLOCK_SIZE * cRow) * m_size + (col + BLOCK_SIZE * cCol)] = tmp + 4;
+        C[(row + BLOCK_SIZE * cRow) * m_size + (col + BLOCK_SIZE * cCol)] = tmp;
     }
 }
 
@@ -286,7 +286,7 @@ __global__ void ker4(const double * A, const double * B, double * C, int m_size)
         {
             if ((b_row + j) < m_size && (b_col + i) < m_size)
             {
-                C[b_col + i + (b_row + j) * m_size]= reg_C[i][j] + 5;
+                C[b_col + i + (b_row + j) * m_size]= reg_C[i][j];
             }
 
 
@@ -385,7 +385,7 @@ __global__ void ker4_v2(const double * A, const double * B, double * C, int m_si
         {
             if ((b_row + j) < m_size && (b_col + i) < m_size)
             {
-                C[b_col + i + (b_row + j) * m_size]= reg_C[i + BLOCK_SPLIT_N * j] + 6;
+                C[b_col + i + (b_row + j) * m_size]= reg_C[i + BLOCK_SPLIT_N * j];
             }
 
 
@@ -396,156 +396,190 @@ __global__ void ker4_v2(const double * A, const double * B, double * C, int m_si
 
 int main() {
 
-    ofstream out;
-    out.open("../Results" + to_string(N) + " with_offset" + ".txt");
+    vector<int> Ns = {4, 8, 16, 32, 64, 128, 256, 400, 512, 1024};
 
+    for (int N : Ns) {
+        ofstream out;
+        out.open("../Results_AxA/Results" + to_string(N) + ".txt");
+
+        out << "Begin check matmul for " + to_string(N) + "x" + to_string(N) + " matrices" << endl;
 //    int N = 8;
-    auto* h_A = new double [N * N];
-    auto* h_B = new double [N * N];
-    auto* h_C = new double [N * N];
-    auto* d_C_res = new double [N * N];
+        auto* h_A = new double [N * N];
+        auto* h_C = new double [N * N];
+        auto* d_C_res = new double [N * N];
 
-    double * d_A;
-    double * d_B;
-    double * d_C;
+        double * d_A;
+//        double * d_B;
+        double * d_C;
 
-    cudaMalloc(&d_A, sizeof(double ) * N * N);
-    cudaMalloc(&d_B, sizeof(double ) * N * N);
-    cudaMalloc(&d_C, sizeof(double ) * N * N);
-
-
-    dim3 grid_size( (N + BLOCK_SIZE - 1) / BLOCK_SIZE, (N + BLOCK_SIZE - 1) / BLOCK_SIZE);
-    dim3 block_size(BLOCK_SIZE, BLOCK_SIZE);
-    chrono::high_resolution_clock cl;
-    out << "grid: " << grid_size.x << "x" << grid_size.y << endl;
-    out << "block: " << block_size.x << "x" << block_size.y << endl << endl;
-    auto start = chrono::high_resolution_clock::now();
-    create_matrix(h_A, N);
-    create_matrix(h_B, N);
-    cudaMemcpy(d_A, h_A, sizeof(double ) * N * N, cudaMemcpyHostToDevice);
-    cudaMemcpy(d_B, h_B, sizeof(double ) * N * N, cudaMemcpyHostToDevice);
+        cudaMalloc(&d_A, sizeof(double ) * N * N);
+//        cudaMalloc(&d_B, sizeof(double ) * N * N);
+        cudaMalloc(&d_C, sizeof(double ) * N * N);
 
 
-    {
-        for(int i = 0; i < 1; i++)
+        dim3 grid_size( (N + BLOCK_SIZE - 1) / BLOCK_SIZE, (N + BLOCK_SIZE - 1) / BLOCK_SIZE);
+        dim3 block_size(BLOCK_SIZE, BLOCK_SIZE);
+        chrono::high_resolution_clock cl;
+        out << "grid: " << grid_size.x << "x" << grid_size.y << endl;
+        out << "block: " << block_size.x << "x" << block_size.y << endl << endl;
+        auto start = chrono::high_resolution_clock::now();
+        create_matrix(h_A, N);
+//        create_matrix(h_B, N);
+        cudaMemcpy(d_A, h_A, sizeof(double ) * N * N, cudaMemcpyHostToDevice);
+//        cudaMemcpy(d_B, h_B, sizeof(double ) * N * N, cudaMemcpyHostToDevice);
+
+
         {
-            cpu_matmul(h_A, h_B, h_C, N);
+            for(int i = 0; i < 1; i++)
+            {
+                cpu_matmul(h_A, h_A, h_C, N);
+            }
+            if(N < 20)
+            {
+                print_matrix(h_C, N);
+            }
+
+
         }
-//        print_matrix(h_C, N);
+        auto end = chrono::high_resolution_clock::now();
+        double time_elapsed = (double )chrono::duration_cast<chrono::microseconds >(end - start).count();
+        out << "CPU time: "<< time_elapsed / 1000000 << endl << endl;
+
+        start = chrono::high_resolution_clock::now();
+        {
+            for(int i = 0; i < 20; i++)
+            {
+                ker1<<<grid_size, block_size>>>(d_A, d_A, d_C, N);
+            }
+            cudaMemcpy(d_C_res, d_C, sizeof(double ) * N * N, cudaMemcpyDeviceToHost);
+    if(N < 20)
+    {
+        print_matrix(d_C_res, N);
+    }
+
+        }
+        end = chrono::high_resolution_clock::now();
+        time_elapsed = (double )chrono::duration_cast<chrono::microseconds >(end - start).count();
+
+
+        out << "ker1 time: " << time_elapsed / 1000000 << endl;
+        check_matrix(d_C_res, h_C, N, "cpu", "ker1", out);
+
+        start = chrono::high_resolution_clock::now();
+        {
+            for(int i = 0; i < 20; i++)
+            {
+                ker2<<<grid_size, dim3(BLOCK_SIZE * BLOCK_SIZE)>>>(d_A, d_A, d_C, N);
+            }
+            cudaMemcpy(d_C_res, d_C, sizeof(double ) * N * N, cudaMemcpyDeviceToHost);
+
+
+    if(N < 20)
+    {
+        print_matrix(d_C_res, N);
+    }
+
+        }
+        end = chrono::high_resolution_clock::now();
+        time_elapsed = (double )chrono::duration_cast<chrono::microseconds >(end - start).count();
+
+
+        out << "ker2 time: " << time_elapsed / 1000000 << endl;
+        check_matrix(d_C_res, h_C, N, "cpu", "ker2", out);
+
+        start = chrono::high_resolution_clock::now();
+        {
+            for(int i = 0; i < 20; i++)
+            {
+                ker3<<<grid_size, block_size>>>(d_A, d_A, d_C, N);
+            }
+            cudaMemcpy(d_C_res, d_C, sizeof(double ) * N * N, cudaMemcpyDeviceToHost);
+
+    if(N < 20)
+    {
+        print_matrix(d_C_res, N);
+    }
+
+
+        }
+        end = chrono::high_resolution_clock::now();
+        time_elapsed = (double )chrono::duration_cast<chrono::microseconds >(end - start).count();
+        out << "ker3 time: " << time_elapsed / 1000000 << endl;
+        check_matrix(d_C_res, h_C, N, "cpu", "ker3", out);
+
+        start = chrono::high_resolution_clock::now();
+        {
+            for(int i = 0; i < 20; i++)
+            {
+                ker3_v2<<<grid_size, BLOCK_SIZE * BLOCK_SIZE>>>(d_A, d_A, d_C, N);
+            }
+            cudaMemcpy(d_C_res, d_C, sizeof(double ) * N * N, cudaMemcpyDeviceToHost);
+
+            if(N < 20)
+            {
+                print_matrix(d_C_res, N);
+            }
+        }
+        end = chrono::high_resolution_clock::now();
+        time_elapsed = (double )chrono::duration_cast<chrono::microseconds >(end - start).count();
+        out << "ker3_v2 time: " << time_elapsed / 1000000 << endl;
+        check_matrix(d_C_res, h_C, N, "cpu", "ker3_v2", out);
+
+        start = chrono::high_resolution_clock::now();
+        {
+            for(int i = 0; i < 20; i++)
+            {
+                ker4<<<grid_size, dim3(BLOCK_SIZE / BLOCK_SPLIT_N, BLOCK_SIZE / BLOCK_SPLIT_N)>>>(d_A, d_A, d_C, N);
+            }
+            cudaMemcpy(d_C_res, d_C, sizeof(double ) * N * N, cudaMemcpyDeviceToHost);
+
+            if(N < 20)
+            {
+                print_matrix(d_C_res, N);
+            }
+        }
+
+        end = chrono::high_resolution_clock::now();
+        time_elapsed = (double )chrono::duration_cast<chrono::microseconds >(end - start).count();
+        out << "ker4 time: " << time_elapsed / 1000000 << endl;
+        check_matrix(d_C_res, h_C, N, "cpu", "ker4", out);
+
+        start = chrono::high_resolution_clock::now();
+        {
+            for(int i = 0; i < 20; i++)
+            {
+                ker4_v2<<<grid_size, dim3(BLOCK_SIZE / BLOCK_SPLIT_N * BLOCK_SIZE / BLOCK_SPLIT_N)>>>(d_A, d_A, d_C, N);
+            }
+            cudaMemcpy(d_C_res, d_C, sizeof(double ) * N * N, cudaMemcpyDeviceToHost);
+
+            if(N < 20)
+            {
+                print_matrix(d_C_res, N);
+            }
+        }
+
+        end = chrono::high_resolution_clock::now();
+        time_elapsed = (double )chrono::duration_cast<chrono::microseconds >(end - start).count();
+        out << "ker4_v2 time: " << time_elapsed / 1000000 << endl;
+        check_matrix(d_C_res, h_C, N, "cpu", "ker4_v2", out);
+
+
+        out << "End check matmul for " + to_string(N) + "x" + to_string(N) + " matrices" << endl;
+
+        out.close();
+        delete[] h_A;
+//        delete[] h_B;
+        delete[] h_C;
+        delete[] d_C_res;
+        cudaFree(d_A);
+//        cudaFree(d_B);
+        cudaFree(d_C);
+
+
+
 
 
     }
-    auto end = chrono::high_resolution_clock::now();
-    double time_elapsed = (double )chrono::duration_cast<chrono::microseconds >(end - start).count();
-    out << "CPU time: "<< time_elapsed / 1000000 << endl << endl;
-
-    start = chrono::high_resolution_clock::now();
-    {
-        for(int i = 0; i < 20; i++)
-        {
-            ker1<<<grid_size, block_size>>>(d_A, d_B, d_C, N);
-        }
-        cudaMemcpy(d_C_res, d_C, sizeof(double ) * N * N, cudaMemcpyDeviceToHost);
-//        print_matrix(d_C_res, N);
-
-    }
-    end = chrono::high_resolution_clock::now();
-    time_elapsed = (double )chrono::duration_cast<chrono::microseconds >(end - start).count();
-
-
-    out << "ker1 time: " << time_elapsed / 1000000 << endl;
-    check_matrix(d_C_res, h_C, N, "cpu", "ker1", out);
-
-    start = chrono::high_resolution_clock::now();
-    {
-        for(int i = 0; i < 20; i++)
-        {
-            ker2<<<grid_size, dim3(BLOCK_SIZE * BLOCK_SIZE)>>>(d_A, d_B, d_C, N);
-        }
-        cudaMemcpy(d_C_res, d_C, sizeof(double ) * N * N, cudaMemcpyDeviceToHost);
-
-
-//        print_matrix(d_C_res, N);
-
-    }
-    end = chrono::high_resolution_clock::now();
-    time_elapsed = (double )chrono::duration_cast<chrono::microseconds >(end - start).count();
-
-
-    out << "ker2 time: " << time_elapsed / 1000000 << endl;
-    check_matrix(d_C_res, h_C, N, "cpu", "ker2", out);
-
-    start = chrono::high_resolution_clock::now();
-    {
-        for(int i = 0; i < 20; i++)
-        {
-            ker3<<<grid_size, block_size>>>(d_A, d_B, d_C, N);
-        }
-        cudaMemcpy(d_C_res, d_C, sizeof(double ) * N * N, cudaMemcpyDeviceToHost);
-
-//        print_matrix(d_C_res, N);
-
-
-    }
-    end = chrono::high_resolution_clock::now();
-    time_elapsed = (double )chrono::duration_cast<chrono::microseconds >(end - start).count();
-    out << "ker3 time: " << time_elapsed / 1000000 << endl;
-    check_matrix(d_C_res, h_C, N, "cpu", "ker3", out);
-
-    start = chrono::high_resolution_clock::now();
-    {
-        for(int i = 0; i < 20; i++)
-        {
-            ker3_v2<<<grid_size, BLOCK_SIZE * BLOCK_SIZE>>>(d_A, d_B, d_C, N);
-        }
-        cudaMemcpy(d_C_res, d_C, sizeof(double ) * N * N, cudaMemcpyDeviceToHost);
-
-//        print_matrix(d_C_res, N);
-    }
-    end = chrono::high_resolution_clock::now();
-    time_elapsed = (double )chrono::duration_cast<chrono::microseconds >(end - start).count();
-    out << "ker3_v2 time: " << time_elapsed / 1000000 << endl;
-    check_matrix(d_C_res, h_C, N, "cpu", "ker3_v2", out);
-
-    start = chrono::high_resolution_clock::now();
-    {
-        for(int i = 0; i < 20; i++)
-        {
-            ker4<<<grid_size, dim3(BLOCK_SIZE / BLOCK_SPLIT_N, BLOCK_SIZE / BLOCK_SPLIT_N)>>>(d_A, d_B, d_C, N);
-        }
-        cudaMemcpy(d_C_res, d_C, sizeof(double ) * N * N, cudaMemcpyDeviceToHost);
-
-//        print_matrix(d_C_res, N);
-    }
-
-    end = chrono::high_resolution_clock::now();
-    time_elapsed = (double )chrono::duration_cast<chrono::microseconds >(end - start).count();
-    out << "ker4 time: " << time_elapsed / 1000000 << endl;
-    check_matrix(d_C_res, h_C, N, "cpu", "ker4", out);
-
-    start = chrono::high_resolution_clock::now();
-    {
-        for(int i = 0; i < 20; i++)
-        {
-            ker4_v2<<<grid_size, dim3(BLOCK_SIZE / BLOCK_SPLIT_N * BLOCK_SIZE / BLOCK_SPLIT_N)>>>(d_A, d_B, d_C, N);
-        }
-        cudaMemcpy(d_C_res, d_C, sizeof(double ) * N * N, cudaMemcpyDeviceToHost);
-
-//        print_matrix(d_C_res, N);
-    }
-
-    end = chrono::high_resolution_clock::now();
-    time_elapsed = (double )chrono::duration_cast<chrono::microseconds >(end - start).count();
-    out << "ker4_v2 time: " << time_elapsed / 1000000 << endl;
-    check_matrix(d_C_res, h_C, N, "cpu", "ker4_v2", out);
-
-    delete[] h_A;
-    delete[] h_B;
-    delete[] h_C;
-    delete[] d_C_res;
-    cudaFree(d_A);
-    cudaFree(d_B);
-    cudaFree(d_C);
-    out.close();
     return 0;
+
 }
