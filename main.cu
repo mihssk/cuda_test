@@ -9,9 +9,9 @@ using namespace std;
 #define BLOCK_SIZE 32
 #define BLOCK_SPLIT_N 4
 #define SYNC_T __syncthreads();
+#define N 512
 
-
-void print_matrix(double* m, int m_size)
+void print_matrix(double * m, int m_size)
 {
     for(int i = 0; i < m_size; i++)
     {
@@ -24,7 +24,7 @@ void print_matrix(double* m, int m_size)
 
 }
 
-void check_matrix(const double* m1, const double* m2, int m_size, const string& nm1, const string& nm2, double precision = 0.001)
+void check_matrix(const double * m1, const double * m2, int m_size, const string& nm1, const string& nm2, double precision = 0.001)
 {
     bool ret = true;
     int p = 1;
@@ -47,12 +47,12 @@ void check_matrix(const double* m1, const double* m2, int m_size, const string& 
     }
     if (ret)
     {
-        cout << "The matrices " << nm1 + " and " << nm2 << " are identical. Error: " <<  err;
+        cout << "The matrices " << nm1 + " and " << nm2 << " are identical" << endl;
     }
-    cout << endl;
+    cout << "Error: " <<  err << endl;
 }
 
-void create_matrix(double* m, int m_size)
+void create_matrix(double * m, int m_size)
 {
     std::random_device rd;
     std::mt19937 gen(rd());
@@ -62,12 +62,12 @@ void create_matrix(double* m, int m_size)
     {
         for(int j = 0; j < m_size; j++)
         {
-            m[i * m_size + j] = (double)distr(gen);
+            m[i * m_size + j] = (double )distr(gen);
         }
     }
 }
 
-void cpu_matmul(const double* A, const double* B, double* C, int m_size)
+void cpu_matmul(const double * A, const double * B, double * C, int m_size)
 {
     for(int i = 0; i < m_size; i++)
     {
@@ -83,7 +83,7 @@ void cpu_matmul(const double* A, const double* B, double* C, int m_size)
     }
 }
 
-__global__ void ker1(const double* A, const double* B, double* C, int m_size)
+__global__ void ker1(const double * A, const double * B, double * C, int m_size)
 {
     int col = blockDim.x * blockIdx.x + threadIdx.x;
     int row = blockDim.y * blockIdx.y + threadIdx.y;
@@ -103,7 +103,7 @@ __global__ void ker1(const double* A, const double* B, double* C, int m_size)
 
 }
 
-__global__ void ker2(const double* A, const double* B, double* C, int m_size) {
+__global__ void ker2(const double * A, const double * B, double * C, int m_size) {
     int col = BLOCK_SIZE * blockIdx.x + threadIdx.x / BLOCK_SIZE;
     int row = BLOCK_SIZE * blockIdx.y + threadIdx.x % BLOCK_SIZE;
 
@@ -121,7 +121,7 @@ __global__ void ker2(const double* A, const double* B, double* C, int m_size) {
 
 }
 
-__global__ void ker3(const double* A, const double* B, double* C, int m_size) {
+__global__ void ker3(const double * A, const double * B, double * C, int m_size) {
     __shared__ double s_A[BLOCK_SIZE][BLOCK_SIZE];
     __shared__ double s_B[BLOCK_SIZE][BLOCK_SIZE];
 
@@ -158,7 +158,7 @@ __global__ void ker3(const double* A, const double* B, double* C, int m_size) {
     }
 }
 
-__global__ void ker3_v2(const double* A, const double* B, double* C, int m_size) {
+__global__ void ker3_v2(const double * A, const double * B, double * C, int m_size) {
     __shared__ double s_A[BLOCK_SIZE * BLOCK_SIZE];
     __shared__ double s_B[BLOCK_SIZE * BLOCK_SIZE];
 
@@ -197,14 +197,14 @@ __global__ void ker3_v2(const double* A, const double* B, double* C, int m_size)
         C[(row + BLOCK_SIZE * cRow) * m_size + (col + BLOCK_SIZE * cCol)] = tmp;
     }
 }
-__global__ void ker4(const double* A, const double* B, double* C, int m_size)
+__global__ void ker4(const double * A, const double * B, double * C, int m_size)
 {
     __shared__ double s_A[BLOCK_SIZE][BLOCK_SIZE];
     __shared__ double s_B[BLOCK_SIZE][BLOCK_SIZE];
 
-    float reg_C[BLOCK_SPLIT_N][BLOCK_SPLIT_N] = {0.0f};
-    float reg_A[BLOCK_SPLIT_N];
-    float reg_B[BLOCK_SPLIT_N];
+    double reg_C[BLOCK_SPLIT_N][BLOCK_SPLIT_N] = {0.0f};
+    double reg_A[BLOCK_SPLIT_N];
+    double reg_B[BLOCK_SPLIT_N];
 
     int b_col = blockIdx.x * BLOCK_SIZE + threadIdx.x * BLOCK_SPLIT_N;
     int b_row = blockIdx.y * BLOCK_SIZE + threadIdx.y * BLOCK_SPLIT_N;
@@ -214,29 +214,94 @@ __global__ void ker4(const double* A, const double* B, double* C, int m_size)
         {
             for(int split_y = 0; split_y < BLOCK_SPLIT_N; split_y++)
             {
-                s_A[threadIdx.x * BLOCK_SPLIT_N + split_x][threadIdx.y * BLOCK_SPLIT_N + split_y] = A[b_col + split_x + (b_row + split_y) * m_size]
+                int g_col = threadIdx.x * BLOCK_SPLIT_N + split_x + tile_i * BLOCK_SIZE;
+                int g_row = (b_row + split_y);
+                if (g_col < m_size && g_row < m_size)
+                {
+                    s_A[threadIdx.x * BLOCK_SPLIT_N + split_x][threadIdx.y * BLOCK_SPLIT_N + split_y] = A[g_col + m_size * g_row];
+                }
+                else
+                {
+                    s_A[threadIdx.x * BLOCK_SPLIT_N + split_x][threadIdx.y * BLOCK_SPLIT_N + split_y] = 0;
+                }
+
             }
+
         }
 
+        for(int split_x = 0; split_x < BLOCK_SPLIT_N; split_x++)
+        {
+            for(int split_y = 0; split_y < BLOCK_SPLIT_N; split_y++)
+            {
+                int g_col = (b_col + split_x);
+                int g_row = threadIdx.y * BLOCK_SPLIT_N + split_y + tile_i * BLOCK_SIZE;
+                if (g_col < m_size && g_row < m_size)
+                {
+                    s_B[threadIdx.x * BLOCK_SPLIT_N + split_x][threadIdx.y * BLOCK_SPLIT_N + split_y] = B[g_col + m_size * g_row];
+                }
+                else
+                {
+                    s_B[threadIdx.x * BLOCK_SPLIT_N + split_x][threadIdx.y * BLOCK_SPLIT_N + split_y] = 0;
+                }
+
+            }
+
+
+        }
+        SYNC_T
+
+        for(int k = 0; k < BLOCK_SIZE; k++)
+        {
+            for(int i = 0; i < BLOCK_SPLIT_N; i++)
+            {
+                reg_A[i] = s_A[k][threadIdx.y * BLOCK_SPLIT_N + i]; //TODO чекнуть последовательность
+                reg_B[i] = s_B[threadIdx.x * BLOCK_SPLIT_N + i][k];
+            }
+
+            for(int i = 0; i < BLOCK_SPLIT_N; i++)
+            {
+                for(int j = 0; j < BLOCK_SPLIT_N; j++)
+                {
+                    reg_C[j][i] += reg_A[i] * reg_B[j];
+                }
+            }
+
+        }
+        SYNC_T
+
     }
+    for(int i = 0; i < BLOCK_SPLIT_N; i++)
+    {
+        for(int j = 0; j < BLOCK_SPLIT_N; j++)
+        {
+            if ((b_row + j) < m_size && (b_col + i) < m_size)
+            {
+                C[b_col + i + (b_row + j) * m_size]= reg_C[i][j];
+            }
+
+
+        }
+    }
+
+
 }
 
 int main() {
 
 
-    int N = 1024;
-    auto* h_A = new double[N * N];
-    auto* h_B = new double[N * N];
-    auto* h_C = new double[N * N];
-    auto* d_C_res = new double[N * N];
+//    int N = 8;
+    auto* h_A = new double [N * N];
+    auto* h_B = new double [N * N];
+    auto* h_C = new double [N * N];
+    auto* d_C_res = new double [N * N];
 
-    double* d_A;
-    double* d_B;
-    double* d_C;
+    double * d_A;
+    double * d_B;
+    double * d_C;
 
-    cudaMalloc(&d_A, sizeof(double) * N * N);
-    cudaMalloc(&d_B, sizeof(double) * N * N);
-    cudaMalloc(&d_C, sizeof(double) * N * N);
+    cudaMalloc(&d_A, sizeof(double ) * N * N);
+    cudaMalloc(&d_B, sizeof(double ) * N * N);
+    cudaMalloc(&d_C, sizeof(double ) * N * N);
 
 
     dim3 grid_size( (N + BLOCK_SIZE - 1) / BLOCK_SIZE, (N + BLOCK_SIZE - 1) / BLOCK_SIZE);
@@ -247,8 +312,8 @@ int main() {
     auto start = chrono::high_resolution_clock::now();
     create_matrix(h_A, N);
     create_matrix(h_B, N);
-    cudaMemcpy(d_A, h_A, sizeof(double) * N * N, cudaMemcpyHostToDevice);
-    cudaMemcpy(d_B, h_B, sizeof(double) * N * N, cudaMemcpyHostToDevice);
+    cudaMemcpy(d_A, h_A, sizeof(double ) * N * N, cudaMemcpyHostToDevice);
+    cudaMemcpy(d_B, h_B, sizeof(double ) * N * N, cudaMemcpyHostToDevice);
 
 
     {
@@ -261,7 +326,7 @@ int main() {
 
     }
     auto end = chrono::high_resolution_clock::now();
-    double time_elapsed = (double)chrono::duration_cast<chrono::microseconds >(end - start).count();
+    double time_elapsed = (double )chrono::duration_cast<chrono::microseconds >(end - start).count();
     cout << "CPU time: "<< time_elapsed / 1000000 << endl << endl;
 
     start = chrono::high_resolution_clock::now();
@@ -270,12 +335,12 @@ int main() {
         {
             ker1<<<grid_size, block_size>>>(d_A, d_B, d_C, N);
         }
-        cudaMemcpy(d_C_res, d_C, sizeof(double) * N * N, cudaMemcpyDeviceToHost);
+        cudaMemcpy(d_C_res, d_C, sizeof(double ) * N * N, cudaMemcpyDeviceToHost);
 //        print_matrix(d_C_res, N);
 
     }
     end = chrono::high_resolution_clock::now();
-    time_elapsed = (double)chrono::duration_cast<chrono::microseconds >(end - start).count();
+    time_elapsed = (double )chrono::duration_cast<chrono::microseconds >(end - start).count();
 
 
     cout << "ker1 time: " << time_elapsed / 1000000 << endl << endl;
@@ -287,14 +352,14 @@ int main() {
         {
             ker2<<<grid_size, dim3(BLOCK_SIZE * BLOCK_SIZE)>>>(d_A, d_B, d_C, N);
         }
-        cudaMemcpy(d_C_res, d_C, sizeof(double) * N * N, cudaMemcpyDeviceToHost);
+        cudaMemcpy(d_C_res, d_C, sizeof(double ) * N * N, cudaMemcpyDeviceToHost);
 
 
 //        print_matrix(d_C_res, N);
 
     }
     end = chrono::high_resolution_clock::now();
-    time_elapsed = (double)chrono::duration_cast<chrono::microseconds >(end - start).count();
+    time_elapsed = (double )chrono::duration_cast<chrono::microseconds >(end - start).count();
 
 
     cout << "ker2 time: " << time_elapsed / 1000000 << endl << endl;
@@ -306,14 +371,14 @@ int main() {
         {
             ker3<<<grid_size, block_size>>>(d_A, d_B, d_C, N);
         }
-        cudaMemcpy(d_C_res, d_C, sizeof(double) * N * N, cudaMemcpyDeviceToHost);
+        cudaMemcpy(d_C_res, d_C, sizeof(double ) * N * N, cudaMemcpyDeviceToHost);
 
 //        print_matrix(d_C_res, N);
 
 
     }
     end = chrono::high_resolution_clock::now();
-    time_elapsed = (double)chrono::duration_cast<chrono::microseconds >(end - start).count();
+    time_elapsed = (double )chrono::duration_cast<chrono::microseconds >(end - start).count();
     cout << "ker3 time: " << time_elapsed / 1000000 << endl << endl;
     check_matrix(d_C_res, h_C, N, "cpu", "ker3");
 
@@ -323,10 +388,14 @@ int main() {
         {
             ker3_v2<<<grid_size, BLOCK_SIZE * BLOCK_SIZE>>>(d_A, d_B, d_C, N);
         }
-        cudaMemcpy(d_C_res, d_C, sizeof(double) * N * N, cudaMemcpyDeviceToHost);
+        cudaMemcpy(d_C_res, d_C, sizeof(double ) * N * N, cudaMemcpyDeviceToHost);
 
 //        print_matrix(d_C_res, N);
     }
+    end = chrono::high_resolution_clock::now();
+    time_elapsed = (double )chrono::duration_cast<chrono::microseconds >(end - start).count();
+    cout << "ker3_v2 time: " << time_elapsed / 1000000 << endl << endl;
+    check_matrix(d_C_res, h_C, N, "cpu", "ker3_v2");
 
     start = chrono::high_resolution_clock::now();
     {
@@ -334,15 +403,15 @@ int main() {
         {
             ker4<<<grid_size, dim3(BLOCK_SIZE / BLOCK_SPLIT_N, BLOCK_SIZE / BLOCK_SPLIT_N)>>>(d_A, d_B, d_C, N);
         }
-        cudaMemcpy(d_C_res, d_C, sizeof(double) * N * N, cudaMemcpyDeviceToHost);
+        cudaMemcpy(d_C_res, d_C, sizeof(double ) * N * N, cudaMemcpyDeviceToHost);
 
 //        print_matrix(d_C_res, N);
     }
 
     end = chrono::high_resolution_clock::now();
-    time_elapsed = (double)chrono::duration_cast<chrono::microseconds >(end - start).count();
-    cout << "ker3_v2 time: " << time_elapsed / 1000000 << endl << endl;
-    check_matrix(d_C_res, h_C, N, "cpu", "ker3_v2");
+    time_elapsed = (double )chrono::duration_cast<chrono::microseconds >(end - start).count();
+    cout << "ker4 time: " << time_elapsed / 1000000 << endl << endl;
+    check_matrix(d_C_res, h_C, N, "cpu", "ker4");
 
     delete[] h_A;
     delete[] h_B;
