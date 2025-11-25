@@ -254,7 +254,7 @@ __global__ void ker4(const double * A, const double * B, double * C, int m_size)
         {
             for(int i = 0; i < BLOCK_SPLIT_N; i++)
             {
-                reg_A[i] = s_A[k][threadIdx.y * BLOCK_SPLIT_N + i]; //TODO чекнуть последовательность
+                reg_A[i] = s_A[k][threadIdx.y * BLOCK_SPLIT_N + i];
                 reg_B[i] = s_B[threadIdx.x * BLOCK_SPLIT_N + i][k];
             }
 
