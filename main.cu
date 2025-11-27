@@ -62,7 +62,7 @@ void create_matrix(double * m, int m_size)
 {
     std::random_device rd;
     std::mt19937 gen(rd());
-    std::uniform_real_distribution<> distr(1,2); // distribution in range [1, 6]
+    std::uniform_real_distribution<> distr(1,2);
 
     for(int i = 0; i < m_size; i++)
     {
@@ -399,7 +399,7 @@ __global__ void ker4_v2(const double * A, const double * B, double * C, int m_si
 
 int main() {
 
-    vector<int> Ns = {4, 8, 16, 32, 64, 128, 256, 400, 512, 1024};
+
     int N = 500;
     int N_b = 17;
 
