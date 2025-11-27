@@ -61,7 +61,7 @@ void create_matrix(double * m, int m_size)
 {
     std::random_device rd;
     std::mt19937 gen(rd());
-    std::uniform_real_distribution<> distr(1,2); // distribution in range [1, 6]
+    std::uniform_real_distribution<> distr(1,2);
 
     for(int i = 0; i < m_size; i++)
     {
