@@ -2,12 +2,11 @@
 #include "cuda_runtime.h"
 int main()
 {
-    int b = 4;
-    int c = 5;
-    int* a[2] = {&b, &c};
+    cudaDeviceProp prop;
+    cudaGetDeviceProperties(&prop, 0); // 0 - номер устройства
 
-    std::cout << *a[1];
-
-
+    printf("Name of GPU: %s\n", prop.name);
+    printf("Compute Capability: %d.%d\n", prop.major, prop.minor);
+    printf("Max shared memory per block (KB): %zu\n", prop.sharedMemPerBlock / 1024);
     return 0;
 }

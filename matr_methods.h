@@ -51,7 +51,7 @@ void check_matrix(const T * m1, const T * m2, int m_size, const string& nm1, con
     }
     else
     {
-        f << "ERROR! The matrices " << nm1 + " and " << nm2 << " are not identical" << endl;
+        f << endl << "ERROR! The matrices " << nm1 + " and " << nm2 << " are not identical" << endl;
     }
 
     f << "Error: " <<  err << endl << endl;
@@ -80,7 +80,21 @@ void create_identical_matrix(T * m, int m_size)
 {
     for(int i = 0; i < m_size; i++)
     {
-        m[i * m_size + i] = 1;
+        for(int j = 0; j < m_size; j++)
+        {
+            if(i == j)
+            {
+                m[i * m_size + j] = 1;
+
+            }
+            else
+            {
+                m[i * m_size + j] = 0;
+
+            }
+
+        }
+
     }
 }
 

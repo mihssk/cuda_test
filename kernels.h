@@ -1,8 +1,4 @@
-#include <cuda_runtime.h>
-
-#define SYNC_T __syncthreads();
-#define BLOCK_SIZE 32
-#define BLOCK_SPLIT_N 4
+#include "device_funcs.h"
 
 #define CUDA_CHECK(expr_to_check) do {            \
     cudaError_t result  = expr_to_check;          \
@@ -16,6 +12,7 @@
                 cudaGetErrorString(result));      \
     }                                             \
 } while(0)
+
 
 __global__ void ker1(const double * A, const double * B, double * C, int m_size)
 {
@@ -343,7 +340,34 @@ __global__ void ker_add_with_ks(double * A, const double * B, double k1, double 
 
 }
 
-__global__ void Taylor_exp(const double * A, double * B, double k1, double k2, int m_size)
+__global__ void Taylor_exp_ker(const double * A, double * B, int m_size)
 {
+    __shared__ double A_copy[BLOCK_SIZE][BLOCK_SIZE];
+    __shared__ double A_t1[BLOCK_SIZE][BLOCK_SIZE];
+    __shared__ double A_t2[BLOCK_SIZE][BLOCK_SIZE];
+    __shared__ double A_exp[BLOCK_SIZE][BLOCK_SIZE];
+
+    int col = threadIdx.x + blockIdx.x * BLOCK_SIZE;
+    int row = threadIdx.y + blockIdx.y * BLOCK_SIZE;
+
+    if(col < m_size && row < m_size)
+    {
+        A_t1[threadIdx.y][threadIdx.x] = A[m_size * row + col];
+        A_copy[threadIdx.y][threadIdx.x] = A[m_size * row + col];
+        A_exp[threadIdx.y][threadIdx.x] = B[m_size * row + col];
+    }
+    else
+    {
+        A_t1[threadIdx.y][threadIdx.x] = 0;
+        A_exp[threadIdx.y][threadIdx.x] = 0;
+    }
+
+    SYNC_T
+
+    dev_add_with_ks(A_exp, A_t1, 1, 1, m_size);
+    dev_ker3_matmul(A, A_copy, A_t1, A_t2, m_size);
+
 
 }
+
+
